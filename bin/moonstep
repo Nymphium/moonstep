@@ -34,9 +34,9 @@ vmco = vm c, src
 flag = true
 
 while flag
-	vmstatus = coroutine.status vmco
+	vmstatus = -> coroutine.status vmco
 
-	disp = vmstatus == "dead" and "(dead)" or toint src.pc
+	disp = vmstatus! == "dead" and "(dead)" or toint src.pc
 
 	io.write "[#{disp}]> "
 
@@ -48,17 +48,17 @@ while flag
 		"^bp%s+(%d+)%s*$", (pc) ->
 			bp = toint pc
 		"^r%s*$", ->
-			while vmstatus ~= "dead"
+			while vmstatus! ~= "dead"
 				if bp and bp == src.pc
 					print "breakpoint #{bp}"
 					break
 				coroutine.resume vmco
 
-			if vmstatus == "dead"
-				print "#{filename}: exited program"
+			if vmstatus! == "dead"
+				print "[#{filename}: exited program]"
 		"^n%s*$", ->
-			if vmstatus == "dead"
-				print "#{filename}: exited program"
+			if vmstatus! == "dead"
+				print "[#{filename}: exited program]"
 			else coroutine.resume vmco
 		"^d", -> print inspect src
 		"^q%s*$", -> flag = false
