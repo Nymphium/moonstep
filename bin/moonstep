@@ -7,7 +7,7 @@ toint = math.tointeger
 
 switchmatch = (str, t) ->
 	for i = 1, #t, 2
-		unless (type(t[i]) == "string") or type(t[i + 1]) == "function"
+		if (type(t[i]) ~= "string") or type(t[i + 1]) ~= "function"
 			error "switchmatch failed"
 
 		matches = {str\match t[i]}
@@ -18,50 +18,42 @@ switchmatch = (str, t) ->
 
 local filename
 
-a, b, c = unpack do
+_, _, fnblock = unpack do
 	filename = arg[1] or "luac.out"
 	f = assert (io.open filename), "Failed to open #{filename} No such file or directory"
 	with {decode f}
 		f\close!
 
 src = {
-	pc: 1
+	pc: 0
 	reg: {}
 }
 
 local bp
-vmco = vm c, src
-flag = true
+vmco = vm fnblock, src
+indialogue = true
 
-while flag
-	vmstatus = -> coroutine.status vmco
-
-	disp = vmstatus! == "dead" and "(dead)" or toint src.pc
-
-	io.write "[#{disp}]> "
-
-	line = io.read!
-
-	unless line then break
+while indialogue
+	io.write "[#{vmco\status! == "dead" and "(dead)" or toint src.pc + 1}]> "
+	line = if l =  io.read! then l else break
 
 	switchmatch line, {
 		"^bp%s+(%d+)%s*$", (pc) ->
 			bp = toint pc
 		"^r%s*$", ->
-			while vmstatus! ~= "dead"
-				if bp and bp == src.pc
+			while vmco\resume!
+				if bp and bp == src.pc + 1
 					print "breakpoint #{bp}"
 					break
-				coroutine.resume vmco
 
-			if vmstatus! == "dead"
+			if vmco\status! == "dead"
 				print "[#{filename}: exited program]"
 		"^n%s*$", ->
-			if vmstatus! == "dead"
+			if vmco\status! == "dead"
 				print "[#{filename}: exited program]"
-			else coroutine.resume vmco
+			else vmco\resume!
 		"^d", -> print inspect src
-		"^q%s*$", -> flag = false
+		"^q%s*$", -> indialogue = false
 		"^%s*$", ->
 		default: ->
 			io.write "command:\n",

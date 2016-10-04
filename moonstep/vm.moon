@@ -4,14 +4,17 @@ unless RETURN
 import deepcpy from require'moonstep.common.utils'
 optbl = require'moonstep.optbl'
 
+class VMctrler
+	new: (fn) => @co = coroutine.create fn
+	status: => coroutine.status @co
+	resume: => coroutine.resume @co
+
 isk = (rk) ->
 	(rk & 256) ~= 0
 
-vm = (fnblock, src = {}, upreg = {}) ->
+vm = (fnblock, src = {pc: 0, reg: {}}, upreg = {}) ->
 	{:constant, :instruction, :upvalue, :prototype} = fnblock
-
 	{:reg} = src
-	_ENV = deepcpy _ENV
 
 	getrk = (rk) ->
 		if isk rk
@@ -19,8 +22,11 @@ vm = (fnblock, src = {}, upreg = {}) ->
 		else
 			reg[rk]
 
-	coroutine.create ->
-		while src.pc <= #instruction
+	VMctrler ->
+		_ENV = deepcpy _ENV
+		while src.pc < #instruction
+			src.pc += 1
+
 			ins = instruction[src.pc]
 			{RA, RB, RC, op: opec} = ins
 
@@ -73,7 +79,7 @@ vm = (fnblock, src = {}, upreg = {}) ->
 					for r = RB, RC
 						reg[RA] ..= reg[r]
 				when JMP
-					src.pc += RA
+					src.pc += RB
 				when EQ, LT, LE
 					src.pc += 1 if (optbl[opec] (getrk RB), (getrk RC)) ~= RA
 				when TEST
@@ -86,7 +92,15 @@ vm = (fnblock, src = {}, upreg = {}) ->
 				when CALL
 					fn = reg[RA]
 					calllimit = RB == 0 and #reg or (RA + RB - 1)
-					retvals   = {fn unpack reg, (RA + 1), calllimit}
+
+					retvals = if (type fn) == "table" and fn.regnum
+						nreg = {}
+
+						for r = 0, calllimit - (RA + 1)
+							nreg[0] = reg[RA + 1 + r]
+
+						(vm fn, {pc: 1, reg: nreg}, src.reg)\resume!
+					else {fn unpack reg, (RA + 1), calllimit}
 					retlimit  = RC == 0 and #retvals or (RC - 2)
 
 					for r = RA, RA + retlimit
@@ -112,27 +126,20 @@ vm = (fnblock, src = {}, upreg = {}) ->
 					reg[RA] -= reg[RA + 2]
 					src.pc += RB
 				when TFORCALL
-					-- fn = reg[RA]
-					-- retvals = {fn unpack reg, (RA + 1), (RA + 2)}
-
-					-- for r = RA + 3, RA + RC + 2
-						-- reg[r] = retvals[r - RA - 2]
-
-					-- if reg[RA] + 3
-						-- reg[RA + 2] = reg[RA + 3]
-					-- else
-						-- src.pc += 1
 					cb = RA + 3
 					reg[cb + 2] = reg[RA + 2]
 					reg[cb + 1] = reg[RA + 1]
 					reg[cb] = reg[RA]
 					fn = reg[cb]
-					retvals = {fn unpack reg, cb, cb + RC}
 
-					assert instruction[src.pc + 1] == TFORLOOP
+					retvals = {fn unpack reg, cb + 1, cb + RC}
+					table.move retvals, 1, RC, cb, reg
 
+					assert instruction[src.pc + 1].op == TFORLOOP
+				when TFORLOOP
 					if reg[RA + 1]
 						reg[RA] = reg[RA + 1]
+						src.pc += instruction[src.pc][2]
 				when SETLIST
 					for i = 1, RB
 						reg[RA][RC - 1 + i] = reg[RA + i]
@@ -141,8 +148,6 @@ vm = (fnblock, src = {}, upreg = {}) ->
 
 
 			coroutine.yield!
-			src.pc += 1
-
 		reg
 
 vm
