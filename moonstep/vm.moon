@@ -97,9 +97,15 @@ vm = (fnblock, src = {pc: 0, reg: {}}, upreg = {}) ->
 						nreg = {}
 
 						for r = 0, calllimit - (RA + 1)
-							nreg[0] = reg[RA + 1 + r]
+							nreg[r] = reg[RA + 1 + r]
 
-						(vm fn, {pc: 1, reg: nreg}, src.reg)\resume!
+						vm_ = vm fn, {pc: 0, reg: nreg}, src.reg
+
+						while vm_\resume! do (->)!
+
+						table.move nreg, 0, #nreg, 1
+
+						nreg
 					else {fn unpack reg, (RA + 1), calllimit}
 					retlimit  = RC == 0 and #retvals or (RC - 2)
 
@@ -115,7 +121,9 @@ vm = (fnblock, src = {pc: 0, reg: {}}, upreg = {}) ->
 						when 1 then 0
 						else        RB - 2
 
-					return unpack reg, RA, (RA + retlimit)
+					src.reg = {unpack reg, RA, (RA + retlimit)}
+					reg = src.reg
+					break
 				when FORLOOP
 					reg[RA] += reg[RA + 2]
 
