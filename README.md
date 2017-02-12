@@ -2,6 +2,8 @@ moonstep
 ===
 step-executable Lua VM
 
+goto [opeth/moonstep](https://github.com/Nymphium/opeth#moonstep)
+
 ## usage
 `moonstep <luac file>`
 
